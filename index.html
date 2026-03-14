@@ -8,21 +8,203 @@
 </head>
 <body>
     <div class="container">
-        <div class="content">
-            <!-- Logo -->
+        <!-- Header -->
+        <div class="header">
             <div class="logo-wrapper">
                 <img src="assets/logo.png" alt="Timberlytics Logo" class="logo">
             </div>
-            
-            <!-- Title -->
             <h1 class="title">Timberlytics</h1>
-            
-            <!-- Subtitle -->
-            <p class="subtitle">Coming Soon</p>
-            
-            <!-- CTA Button (optional) -->
-            <button class="cta-button">Get Notified</button>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <h2>Search Lowe's Data</h2>
+            <div class="search-form">
+                <input 
+                    type="text" 
+                    id="searchTerm" 
+                    placeholder="Enter search term (e.g., '2x4x8')" 
+                    class="form-input"
+                >
+                <input 
+                    type="text" 
+                    id="storeNumber" 
+                    placeholder="Store number (e.g., '2348')" 
+                    class="form-input"
+                    value="2348"
+                >
+                <button id="searchBtn" class="cta-button">Search</button>
+            </div>
+        </div>
+
+        <!-- Status Message -->
+        <div id="statusMessage" class="status-message"></div>
+
+        <!-- Results Section -->
+        <div class="results-section">
+            <div id="runInfo" class="run-info" style="display: none;">
+                <h3>Latest Run Information</h3>
+                <div id="runDetails" class="run-details"></div>
+            </div>
+
+            <div id="resultsContainer" class="results-container" style="display: none;">
+                <h3>Search Results</h3>
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Brand</th>
+                            <th>Description</th>
+                            <th>Price</th>
+                            <th>Rating</th>
+                            <th>Reviews</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="noResults" class="no-results" style="display: none;">
+                <p>No data found. Try running a search or check if the crawler has populated the database.</p>
+            </div>
         </div>
     </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:8000'; // Update this for production
+
+        // DOM Elements
+        const searchTermInput = document.getElementById('searchTerm');
+        const storeNumberInput = document.getElementById('storeNumber');
+        const searchBtn = document.getElementById('searchBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const runInfo = document.getElementById('runInfo');
+        const runDetails = document.getElementById('runDetails');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsBody = document.getElementById('resultsBody');
+        const noResults = document.getElementById('noResults');
+
+        // Event Listeners
+        searchBtn.addEventListener('click', performSearch);
+        searchTermInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        async function performSearch() {
+            const searchTerm = searchTermInput.value.trim();
+            const storeNumber = storeNumberInput.value.trim();
+
+            if (!searchTerm) {
+                showStatus('Please enter a search term.', 'error');
+                return;
+            }
+
+            if (!storeNumber) {
+                showStatus('Please enter a store number.', 'error');
+                return;
+            }
+
+            showStatus('Searching...', 'loading');
+            clearResults();
+
+            try {
+                // Call the convenience endpoint that gets latest run + results
+                const url = new URL(`${API_BASE_URL}/search/latest`);
+                url.searchParams.append('search_term', searchTerm);
+                url.searchParams.append('store_number', storeNumber);
+                url.searchParams.append('limit', 100);
+
+                const response = await fetch(url.toString());
+
+                if (response.status === 404) {
+                    showStatus('No search results found. Have you run the crawler yet?', 'info');
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+                showStatus('Results loaded successfully!', 'success');
+
+            } catch (error) {
+                console.error('Search error:', error);
+                showStatus(`Error: ${error.message}. Make sure the API is running on ${API_BASE_URL}`, 'error');
+            }
+        }
+
+        function displayResults(data) {
+            const { run, results } = data;
+
+            // Display run information
+            if (run) {
+                runDetails.innerHTML = `
+                    <p><strong>Search Term:</strong> ${run.search_term}</p>
+                    <p><strong>Store:</strong> ${run.store_number}</p>
+                    <p><strong>Completed:</strong> ${new Date(run.completed_at).toLocaleString()}</p>
+                    <p><strong>Items Found:</strong> ${run.item_count}</p>
+                    <p><strong>Results Shown:</strong> ${results.length}</p>
+                `;
+                runInfo.style.display = 'block';
+            }
+
+            // Display results
+            if (results && results.length > 0) {
+                resultsBody.innerHTML = results.map((result, index) => `
+                    <tr>
+                        <td>${result.position || index + 1}</td>
+                        <td>${result.brand || 'N/A'}</td>
+                        <td>
+                            ${result.description ? result.description.substring(0, 50) + '...' : 'N/A'}
+                            ${result.pd_url ? `<br><a href="${result.pd_url}" target="_blank">View Product</a>` : ''}
+                        </td>
+                        <td>$${result.selling_price ? parseFloat(result.selling_price).toFixed(2) : 'N/A'}</td>
+                        <td>${result.rating ? result.rating.toFixed(1) + '★' : 'N/A'}</td>
+                        <td>${result.review_count || 0}</td>
+                    </tr>
+                `).join('');
+                resultsContainer.style.display = 'block';
+                noResults.style.display = 'none';
+            } else {
+                noResults.style.display = 'block';
+                resultsContainer.style.display = 'none';
+            }
+        }
+
+        function clearResults() {
+            runInfo.style.display = 'none';
+            resultsContainer.style.display = 'none';
+            noResults.style.display = 'none';
+            resultsBody.innerHTML = '';
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message ${type}`;
+            statusMessage.style.display = 'block';
+
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                }, 4000);
+            }
+        }
+
+        // Health check on page load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/health`);
+                if (response.ok) {
+                    showStatus('✓ Connected to API', 'success');
+                }
+            } catch (error) {
+                showStatus(`⚠ Cannot connect to API at ${API_BASE_URL}. Make sure it's running.`, 'warning');
+            }
+        });
+    </script>
 </body>
 </html>
