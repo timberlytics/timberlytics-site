@@ -1,8 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
-import "./styles.css";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const runtimeEnv = import.meta.env ?? {};
+const SUPABASE_URL = runtimeEnv.VITE_SUPABASE_URL || "https://cbikuhcqbrhdfxvczrrq.supabase.co";
+const SUPABASE_ANON_KEY = runtimeEnv.VITE_SUPABASE_ANON_KEY || "sb_publishable_hVpf9RO37koRtA4hDLCd4A_ygC1OOqs";
 
 const configured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_URL.includes("your-project-ref"));
 const supabase = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
