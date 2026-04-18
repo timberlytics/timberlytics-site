@@ -1,0 +1,16 @@
+{
+  "name": "timberlytics-app",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host localhost --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host localhost --port 4173"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "vite": "^6.2.0"
+  },
+  "devDependencies": {}
+}
