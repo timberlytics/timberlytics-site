@@ -340,10 +340,10 @@ function projectWorkspace(project, summary) {
       <div class="hero-copy"><p class="eyebrow">From video idea to priced job</p><strong>Capture what the creator says, fill the gaps, and walk into the shop with a clean cut list.</strong></div>
     </section>
     <section class="stats-grid">
-      <article class="stat-card"><span>Materials</span><strong>${currency.format(summary.materials)}</strong></article>
-      <article class="stat-card"><span>Labor value</span><strong>${currency.format(summary.labor)}</strong></article>
-      <article class="stat-card"><span>Estimated cost</span><strong>${currency.format(summary.baseCost)}</strong></article>
-      <article class="stat-card accent"><span>Suggested price</span><strong>${currency.format(summary.suggested)}</strong></article>
+      <article class="stat-card"><span>Materials</span><strong data-summary="materials">${currency.format(summary.materials)}</strong></article>
+      <article class="stat-card"><span>Labor value</span><strong data-summary="labor">${currency.format(summary.labor)}</strong></article>
+      <article class="stat-card"><span>Estimated cost</span><strong data-summary="baseCost">${currency.format(summary.baseCost)}</strong></article>
+      <article class="stat-card accent"><span>Suggested price</span><strong data-summary="suggested">${currency.format(summary.suggested)}</strong></article>
     </section>
     <section class="editor-grid">
       <form id="projectForm" class="panel project-form" data-id="${project.id}">
@@ -364,8 +364,8 @@ function projectWorkspace(project, summary) {
       <section class="panel quick-panel">
         <div><p class="eyebrow">Selling math</p><h3>Quote helper</h3></div>
         <div class="quote-box">
-          <div><span>Profit at suggested price</span><strong>${currency.format(summary.profit)}</strong></div>
-          <div><span>Cut pieces</span><strong>${project.cuts.reduce((sum, cut) => sum + toNumber(cut.qty), 0)}</strong></div>
+          <div><span>Profit at suggested price</span><strong data-summary="profit">${currency.format(summary.profit)}</strong></div>
+          <div><span>Cut pieces</span><strong data-summary="cutPieces">${project.cuts.reduce((sum, cut) => sum + toNumber(cut.qty), 0)}</strong></div>
           <div><span>Materials logged</span><strong>${project.materials.length}</strong></div>
         </div>
         <p class="helper-text">Markup is applied after materials and labor, so quick quotes include your time.</p>
@@ -510,7 +510,7 @@ function materialRow(material) {
       ${cell("qty", material.qty, "", "number", "0.01")}
       ${cell("unit", material.unit, "board")}
       ${cell("unit_cost", material.unit_cost, "", "number", "0.01")}
-      <td class="row-total">${currency.format(materialTotal(material))}</td>
+      <td class="row-total" data-material-total>${currency.format(materialTotal(material))}</td>
       ${cell("source", material.source, "Lowes")}
       <td><button class="icon-btn" data-remove-material="${material.id}" type="button">x</button></td>
     </tr>
@@ -644,9 +644,11 @@ function bindDashboard() {
 
   document.querySelector("#projectForm")?.addEventListener("input", debounceProjectUpdate);
   document.querySelectorAll("[data-material-id] input").forEach(input => {
+    input.addEventListener("input", () => updateMaterialLocal(input.closest("tr").dataset.materialId, input.name, input.value));
     input.addEventListener("change", () => updateLine("materials", input.closest("tr").dataset.materialId, input.name, input.value));
   });
   document.querySelectorAll("[data-cut-id] input").forEach(input => {
+    input.addEventListener("input", () => updateCutLocal(input.closest("tr").dataset.cutId, input.name, input.value));
     input.addEventListener("change", () => updateLine("cuts", input.closest("tr").dataset.cutId, input.name, input.value));
   });
   document.querySelectorAll("[data-remove-material]").forEach(button => button.addEventListener("click", () => removeLine("materials", button.dataset.removeMaterial)));
@@ -691,6 +693,46 @@ function updateKerfCalculatorDom() {
   if (error) error.textContent = results.error;
   document.querySelectorAll("[data-kerf-index]").forEach(row => {
     row.addEventListener("click", () => selectKerfCut(Number(row.dataset.kerfIndex)));
+  });
+}
+
+function updateMaterialLocal(id, field, value) {
+  const project = activeProject();
+  const material = project?.materials.find(item => String(item.id) === String(id));
+  if (!material) return;
+
+  material[field] = ["qty", "unit_cost"].includes(field) ? toNumber(value) : value;
+  const row = document.querySelector(`[data-material-id="${cssEscape(id)}"]`);
+  const total = row?.querySelector("[data-material-total]");
+  if (total) total.textContent = currency.format(materialTotal(material));
+  refreshSummaryDom();
+}
+
+function updateCutLocal(id, field, value) {
+  const project = activeProject();
+  const cut = project?.cuts.find(item => String(item.id) === String(id));
+  if (!cut) return;
+
+  cut[field] = field === "qty" ? toNumber(value) : value;
+  refreshSummaryDom();
+}
+
+function refreshSummaryDom() {
+  const project = activeProject();
+  const summary = totals(project);
+  const values = {
+    materials: currency.format(summary.materials),
+    labor: currency.format(summary.labor),
+    baseCost: currency.format(summary.baseCost),
+    suggested: currency.format(summary.suggested),
+    profit: currency.format(summary.profit),
+    cutPieces: String(project?.cuts.reduce((sum, cut) => sum + toNumber(cut.qty), 0) ?? 0)
+  };
+
+  Object.entries(values).forEach(([key, value]) => {
+    document.querySelectorAll(`[data-summary="${key}"]`).forEach(node => {
+      node.textContent = value;
+    });
   });
 }
 
@@ -926,6 +968,11 @@ function parseOptionalMeasurement(value) {
 function fmtInches(value) {
   const rounded = Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
   return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return CSS.escape(String(value));
+  return String(value).replaceAll('"', '\\"');
 }
 
 function escapeHtml(value) {
