@@ -479,6 +479,132 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 
+.kerf-panel {
+  gap: 16px;
+}
+
+.kerf-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.kerf-form {
+  display: grid;
+  gap: 14px;
+}
+
+.kerf-add-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 1fr);
+  gap: 14px;
+}
+
+.kerf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kerf-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+.kerf-summary {
+  display: grid;
+  gap: 13px;
+}
+
+.kerf-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kerf-metric {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfb;
+}
+
+.kerf-metric span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.kerf-metric strong {
+  overflow-wrap: anywhere;
+  font-size: 21px;
+}
+
+.kerf-metric.good strong,
+.kerf-status.good {
+  color: var(--green-dark);
+}
+
+.kerf-metric.warn strong,
+.kerf-status.warn {
+  color: #8a6811;
+}
+
+.kerf-metric.danger strong,
+.kerf-status.danger,
+.danger-text {
+  color: var(--danger);
+}
+
+.kerf-meter {
+  width: 100%;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #edf2ed;
+}
+
+.kerf-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--gold));
+  transition: width 140ms ease;
+}
+
+.kerf-status {
+  display: block;
+  line-height: 1.35;
+}
+
+.kerf-error {
+  min-height: 20px;
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.kerf-table tbody tr {
+  cursor: pointer;
+}
+
+.kerf-table tbody tr:hover,
+.kerf-table tbody tr.selected {
+  background: #f1f8f2;
+}
+
+.empty-table-cell {
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
 .mfa-panel {
   grid-template-columns: minmax(220px, 1fr) auto;
   align-items: center;
@@ -535,7 +661,8 @@ td {
 @media (max-width: 980px) {
   .auth-layout,
   .app-shell,
-  .editor-grid {
+  .editor-grid,
+  .kerf-layout {
     grid-template-columns: 1fr;
   }
 
@@ -570,8 +697,15 @@ td {
 
   .top-actions,
   .field-grid,
+  .kerf-add-row,
+  .kerf-summary-grid,
   .stats-grid,
   .inline-form {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .kerf-actions {
     display: grid;
     grid-template-columns: 1fr;
   }

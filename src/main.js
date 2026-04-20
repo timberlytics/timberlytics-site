@@ -21,6 +21,14 @@ let mfaChallenge = null;
 let mfaEnrollment = null;
 let mfaFactors = [];
 let search = "";
+let kerfTool = {
+  boardLength: "71",
+  kerf: "0.125",
+  label: "",
+  length: "",
+  selectedIndex: null,
+  cuts: []
+};
 
 const emptyProject = userId => ({
   name: "New woodworking build",
@@ -365,6 +373,7 @@ function projectWorkspace(project, summary) {
       </section>
     </section>
     ${materialsPanel(project)}
+    ${kerfCalculatorPanel(project)}
     ${cutsPanel(project)}
   `;
 }
@@ -382,6 +391,115 @@ function materialsPanel(project) {
       </tbody></table></div>
     </section>
   `;
+}
+
+function kerfCalculatorPanel(project) {
+  const results = kerfResults();
+  return `
+    <section class="panel kerf-panel">
+      <div class="panel-heading">
+        <div><p class="eyebrow">Board math</p><h3>Kerf cut calculator</h3></div>
+        <button id="importProjectCutsBtn" class="ghost-btn" type="button">Import project cuts</button>
+      </div>
+      <div class="kerf-layout">
+        <form id="kerfForm" class="kerf-form">
+          <div class="field-grid">
+            <label>Board length (in)<input id="kerfBoardLength" class="input" name="boardLength" inputmode="decimal" value="${escapeAttr(kerfTool.boardLength)}"></label>
+            <label>Kerf per cut (in)<input id="kerfWidth" class="input" name="kerf" inputmode="decimal" value="${escapeAttr(kerfTool.kerf)}"></label>
+          </div>
+          <div class="kerf-add-row">
+            <label>Label<input id="kerfCutLabel" class="input" name="label" value="${escapeAttr(kerfTool.label)}" placeholder="Rail, stile, shelf"></label>
+            <label>Length (in)<input id="kerfCutLength" class="input" name="length" inputmode="decimal" value="${escapeAttr(kerfTool.length)}" placeholder="24 or 24 1/2"></label>
+          </div>
+          <div class="kerf-actions">
+            <button id="addKerfCutBtn" class="primary-btn" type="button">Add cut</button>
+            <button id="updateKerfCutBtn" class="ghost-btn" type="button" ${kerfTool.selectedIndex === null ? "disabled" : ""}>Update selected</button>
+            <button id="deleteKerfCutBtn" class="danger-btn" type="button" ${kerfTool.selectedIndex === null ? "disabled" : ""}>Delete selected</button>
+            <button id="clearKerfCutsBtn" class="ghost-btn" type="button">Clear all</button>
+          </div>
+          <p id="kerfError" class="helper-text kerf-error" role="status">${results.error ? escapeHtml(results.error) : ""}</p>
+        </form>
+        <aside class="kerf-summary" id="kerfSummary">
+          ${kerfSummaryHtml(results)}
+        </aside>
+      </div>
+      <div class="table-wrap">
+        <table class="kerf-table">
+          <thead><tr><th>#</th><th>Label</th><th>Cut length</th><th>Kerf used</th><th>Used so far</th><th>Remaining</th></tr></thead>
+          <tbody id="kerfRows">${kerfRowsHtml(results)}</tbody>
+        </table>
+      </div>
+      <p class="helper-text">Kerf is counted once for each entered cut. Use the import button to copy lengths from ${escapeHtml(project.name || "this build")} into the calculator.</p>
+    </section>
+  `;
+}
+
+function kerfSummaryHtml(results) {
+  const statusClass = results.remaining < 0 ? "danger" : results.remaining === 0 ? "warn" : "good";
+  const message = results.error
+    ? "Enter valid board and kerf measurements."
+    : results.remaining < 0
+      ? `Over by ${fmtInches(Math.abs(results.remaining))} in.`
+      : results.remaining === 0
+        ? "Perfect fit with no extra length."
+        : `${fmtInches(results.remaining)} in remaining.`;
+
+  return `
+    <div class="kerf-summary-grid">
+      ${kerfMetric("Board length", results.error ? "--" : `${fmtInches(results.boardLength)} in`)}
+      ${kerfMetric("Cut count", String(kerfTool.cuts.length))}
+      ${kerfMetric("Cut total", results.error ? "--" : `${fmtInches(results.cutTotal)} in`)}
+      ${kerfMetric("Kerf total", results.error ? "--" : `${fmtInches(results.kerfTotal)} in`)}
+      ${kerfMetric("Used total", results.error ? "--" : `${fmtInches(results.usedTotal)} in`)}
+      ${kerfMetric("Remaining", results.error ? "--" : `${fmtInches(results.remaining)} in`, statusClass)}
+    </div>
+    <div class="kerf-meter"><span style="width:${results.error ? 0 : results.usagePct}%"></span></div>
+    <strong class="kerf-status ${statusClass}">${escapeHtml(message)}</strong>
+  `;
+}
+
+function kerfMetric(label, value, tone = "") {
+  return `<div class="kerf-metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function kerfRowsHtml(results) {
+  if (!kerfTool.cuts.length) {
+    return `<tr><td colspan="6" class="empty-table-cell">Add cuts manually or import the project cut list.</td></tr>`;
+  }
+
+  return kerfTool.cuts.map((cut, index) => {
+    const row = results.rows[index] ?? { kerf: 0, running: 0, remaining: 0 };
+    return `
+      <tr class="${index === kerfTool.selectedIndex ? "selected" : ""}" data-kerf-index="${index}">
+        <td>${index + 1}</td>
+        <td>${escapeHtml(cut.label)}</td>
+        <td>${fmtInches(cut.length)}</td>
+        <td>${results.error ? "--" : fmtInches(row.kerf)}</td>
+        <td>${results.error ? "--" : fmtInches(row.running)}</td>
+        <td class="${row.remaining < 0 ? "danger-text" : ""}">${results.error ? "--" : fmtInches(row.remaining)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function kerfResults() {
+  try {
+    const boardLength = parseMeasurement(kerfTool.boardLength, "Board length");
+    const kerf = parseMeasurement(kerfTool.kerf, "Kerf");
+    const cutTotal = kerfTool.cuts.reduce((sum, cut) => sum + cut.length, 0);
+    const kerfTotal = kerf * kerfTool.cuts.length;
+    const usedTotal = cutTotal + kerfTotal;
+    const remaining = boardLength - usedTotal;
+    let running = 0;
+    const rows = kerfTool.cuts.map(cut => {
+      running += cut.length + kerf;
+      return { kerf, running, remaining: boardLength - running };
+    });
+    const usagePct = boardLength <= 0 ? 0 : Math.max(0, Math.min((usedTotal / boardLength) * 100, 100));
+    return { boardLength, cutTotal, kerfTotal, usedTotal, remaining, rows, usagePct, error: "" };
+  } catch (error) {
+    return { boardLength: 0, cutTotal: 0, kerfTotal: 0, usedTotal: 0, remaining: 0, rows: [], usagePct: 0, error: error.message };
+  }
 }
 
 function materialRow(material) {
@@ -522,6 +640,7 @@ function bindDashboard() {
   document.querySelector("#deleteProjectBtn")?.addEventListener("click", deleteProject);
   document.querySelector("#addMaterialBtn")?.addEventListener("click", addMaterial);
   document.querySelector("#addCutBtn")?.addEventListener("click", addCut);
+  bindKerfCalculator();
 
   document.querySelector("#projectForm")?.addEventListener("input", debounceProjectUpdate);
   document.querySelectorAll("[data-material-id] input").forEach(input => {
@@ -532,6 +651,122 @@ function bindDashboard() {
   });
   document.querySelectorAll("[data-remove-material]").forEach(button => button.addEventListener("click", () => removeLine("materials", button.dataset.removeMaterial)));
   document.querySelectorAll("[data-remove-cut]").forEach(button => button.addEventListener("click", () => removeLine("cuts", button.dataset.removeCut)));
+}
+
+function bindKerfCalculator() {
+  document.querySelector("#kerfForm")?.addEventListener("input", event => {
+    if (!event.target.name) return;
+    kerfTool[event.target.name] = event.target.value;
+    updateKerfCalculatorDom();
+  });
+
+  document.querySelector("#kerfForm")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addKerfCut();
+    }
+  });
+
+  document.querySelector("#addKerfCutBtn")?.addEventListener("click", addKerfCut);
+  document.querySelector("#updateKerfCutBtn")?.addEventListener("click", updateKerfCut);
+  document.querySelector("#deleteKerfCutBtn")?.addEventListener("click", deleteKerfCut);
+  document.querySelector("#clearKerfCutsBtn")?.addEventListener("click", () => {
+    kerfTool.cuts = [];
+    kerfTool.selectedIndex = null;
+    render();
+  });
+  document.querySelector("#importProjectCutsBtn")?.addEventListener("click", importProjectCutsToKerf);
+  document.querySelectorAll("[data-kerf-index]").forEach(row => {
+    row.addEventListener("click", () => selectKerfCut(Number(row.dataset.kerfIndex)));
+  });
+}
+
+function updateKerfCalculatorDom() {
+  const results = kerfResults();
+  const summary = document.querySelector("#kerfSummary");
+  const rows = document.querySelector("#kerfRows");
+  const error = document.querySelector("#kerfError");
+  if (summary) summary.innerHTML = kerfSummaryHtml(results);
+  if (rows) rows.innerHTML = kerfRowsHtml(results);
+  if (error) error.textContent = results.error;
+  document.querySelectorAll("[data-kerf-index]").forEach(row => {
+    row.addEventListener("click", () => selectKerfCut(Number(row.dataset.kerfIndex)));
+  });
+}
+
+function addKerfCut() {
+  let length;
+  try {
+    length = parseMeasurement(kerfTool.length, "Cut length");
+  } catch (error) {
+    const errorNode = document.querySelector("#kerfError");
+    if (errorNode) errorNode.textContent = error.message;
+    return;
+  }
+
+  kerfTool.cuts.push({
+    label: kerfTool.label.trim() || `Cut ${kerfTool.cuts.length + 1}`,
+    length
+  });
+  kerfTool.label = "";
+  kerfTool.length = "";
+  kerfTool.selectedIndex = null;
+  render();
+}
+
+function selectKerfCut(index) {
+  const cut = kerfTool.cuts[index];
+  if (!cut) return;
+  kerfTool.selectedIndex = index;
+  kerfTool.label = cut.label;
+  kerfTool.length = fmtInches(cut.length);
+  render();
+}
+
+function updateKerfCut() {
+  if (kerfTool.selectedIndex === null) return;
+  let length;
+  try {
+    length = parseMeasurement(kerfTool.length, "Cut length");
+  } catch (error) {
+    const errorNode = document.querySelector("#kerfError");
+    if (errorNode) errorNode.textContent = error.message;
+    return;
+  }
+
+  kerfTool.cuts[kerfTool.selectedIndex] = {
+    label: kerfTool.label.trim() || `Cut ${kerfTool.selectedIndex + 1}`,
+    length
+  };
+  render();
+}
+
+function deleteKerfCut() {
+  if (kerfTool.selectedIndex === null) return;
+  kerfTool.cuts.splice(kerfTool.selectedIndex, 1);
+  kerfTool.selectedIndex = null;
+  kerfTool.label = "";
+  kerfTool.length = "";
+  render();
+}
+
+function importProjectCutsToKerf() {
+  const project = activeProject();
+  if (!project) return;
+
+  kerfTool.cuts = project.cuts.flatMap((cut, cutIndex) => {
+    const length = parseOptionalMeasurement(cut.length);
+    if (length === null) return [];
+    const qty = Math.max(1, Math.floor(toNumber(cut.qty) || 1));
+    return Array.from({ length: qty }, (_, qtyIndex) => ({
+      label: [cut.part, qty > 1 ? qtyIndex + 1 : ""].filter(Boolean).join(" ") || `Cut ${cutIndex + 1}`,
+      length
+    }));
+  });
+  kerfTool.selectedIndex = null;
+  kerfTool.label = "";
+  kerfTool.length = "";
+  render();
 }
 
 let projectTimer = null;
@@ -656,6 +891,41 @@ function downloadFile(filename, contents, type) {
 
 function safeFilename(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "timberlytics";
+}
+
+function parseMeasurement(value, fieldName) {
+  const raw = String(value ?? "").trim().toLowerCase().replace(/["']/g, "").replace(/\binches\b|\binch\b|\bin\b/g, "").trim();
+  if (!raw) throw new Error(`${fieldName} must be a number.`);
+
+  const parts = raw.split(/\s+/);
+  let total = 0;
+  for (const part of parts) {
+    if (part.includes("/")) {
+      const [top, bottom] = part.split("/").map(Number);
+      if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom === 0) throw new Error(`${fieldName} must be a number.`);
+      total += top / bottom;
+    } else {
+      const parsed = Number(part);
+      if (!Number.isFinite(parsed)) throw new Error(`${fieldName} must be a number.`);
+      total += parsed;
+    }
+  }
+
+  if (total < 0) throw new Error(`${fieldName} cannot be negative.`);
+  return total;
+}
+
+function parseOptionalMeasurement(value) {
+  try {
+    return parseMeasurement(value, "Cut length");
+  } catch (_error) {
+    return null;
+  }
+}
+
+function fmtInches(value) {
+  const rounded = Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function escapeHtml(value) {
